@@ -1,0 +1,20 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: lobby-service
+
+frontend:
+  url: ${FRONTEND_URL:http://localhost:3000}
+
+jwt:
+  # ATENCIÓN: Esta clave debe coincidir EXACTAMENTE con la que usa el auth-service
+  secret: ${JWT_SECRET:8a9b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z}
+
+# Documentación de Arquitectura y Seguridad:
+# A diferencia de auth-service y profile-service que usan REST + header inyectado por el Gateway, 
+# este microservicio valida el JWT DIRECTAMENTE en el handshake WebSocket, porque el Gateway solo 
+# puede hacer proxy transparente de la conexión WebSocket (no puede interceptar cada frame STOMP 
+# individual de forma práctica). El Gateway sí valida el JWT una vez al iniciar el proxy WS, 
+# pero lobby-service revalida por defensa en profundidad.

@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # 1. Servicio "auth_db"
+  auth_db:
+    image: postgres:16-alpine
+    container_name: auth_db
+    ports:
+      - "5431:5432"
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+    volumes:
+      - auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shark-network
+
+  # 2. Servicio "profile_db"
+  profile_db:
+    image: postgres:16-alpine
+    container_name: profile_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: profile_db
+      POSTGRES_USER: profile_user
+      POSTGRES_PASSWORD: ${PROFILE_DB_PASSWORD}
+    volumes:
+      - profile_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profile_user -d profile_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shark-network
+
+  # 3. Servicio "game_db"
+  game_db:
+    image: postgres:16-alpine
+    container_name: game_db
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: game_db
+      POSTGRES_USER: game_user
+      POSTGRES_PASSWORD: ${GAME_DB_PASSWORD}
+    volumes:
+      - game_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U game_user -d game_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shark-network
+  # Nota: lobby-service NO tiene base de datos persistente, trabaja 100% en memoria (o en Redis).
+
+  # Añadido: Servicio "redis" para alta disponibilidad de las salas del Lobby
+  lobby_redis:
+    image: redis:7-alpine
+    container_name: lobby_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shark-network
+
+  # 4. Servicio "rabbitmq"
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shark-network
+    # IMPORTANTE: Este broker es el ÚNICO punto de falla crítico de la infraestructura 
+    # de mensajería que debe tolerar caídas sin tumbar los microservicios. 
+    # Lo resolveremos con el Outbox Pattern en el código de cada servicio 
+    # (garantizando la entrega eventual sin bloqueo sincrónico).
+
+  # 5. Stack de observabilidad
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yaml
+    networks:
+      - shark-network
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml
+    networks:
+      - shark-network
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - shark-network
+
+# 6. Red "shark-network"
+networks:
+  shark-network:
+    name: shark-network
+    driver: bridge
+
+volumes:
+  auth_data:
+  profile_data:
+  game_data:
+  redis_data:
+  rabbitmq_data:
+  grafana_data:
+
+# NOTA FINAL: Este archivo docker-compose.yml define SOLO la infraestructura necesaria 
+# para correr el proyecto (Bases de datos, Mensajería y Observabilidad). 
+# Los microservicios de aplicación en sí se añadirán posteriormente en el archivo 
+# docker-compose.override.yml. Esto permite levantar la infraestructura de forma 
+# independiente para desarrollo local sin tener que compilar las aplicaciones.

@@ -1,0 +1,43 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5431}/${POSTGRES_DB:auth_db}
+    username: ${POSTGRES_USER:auth_user}
+    password: ${POSTGRES_PASSWORD:changeme_in_production}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:admin_secret}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      rabbitmq-publisher:
+        baseConfig: default
+
+jwt:
+  # ADVERTENCIA: Este valor es solo de ejemplo para desarrollo local.
+  # En producción, usar una variable de entorno JWT_SECRET proporcionada por un Secret Manager seguro.
+  # (Mínimo de 32 bytes o 256 bits codificados en Base64)
+  secret: ${JWT_SECRET:413F4428472B4B6250655368566D5970337336763979244226452948404D6351}

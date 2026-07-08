@@ -1,0 +1,29 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: profile-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${POSTGRES_DB:profile_db}
+    username: ${POSTGRES_USER:profile_user}
+    password: ${POSTGRES_PASSWORD:changeme_in_production}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:admin_secret}
+
+internal:
+  # ADVERTENCIA: Este valor es un placeholder de ejemplo.
+  # En producción, usar una variable de entorno INTERNAL_SECRET.
+  # DEBE SER EXACTAMENTE EL MISMO VALOR en auth-service, profile-service y game-engine-service
+  secret: ${INTERNAL_SECRET:super_secret_internal_key_123}

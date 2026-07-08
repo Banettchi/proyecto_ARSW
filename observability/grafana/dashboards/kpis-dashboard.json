@@ -1,0 +1,84 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Jugadores Simultáneos Actuales",
+      "type": "stat",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=~\"lobby-service|game-engine-service\"} | json | message=~\"(?i).*conectado.*\" [1m])) - sum(count_over_time({container=~\"lobby-service|game-engine-service\"} | json | message=~\"(?i).*desconectado.*\" [1m]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Partidas Activas",
+      "type": "stat",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"game-engine-service\"} | json | message=~\"(?i).*iniciada.*\" [1h])) - sum(count_over_time({container=\"game-engine-service\"} | json | message=~\"(?i).*finalizando juego.*\" [1h]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "title": "Partidas completadas últimas 24h",
+      "type": "stat",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"game-engine-service\"} | json | message=~\"(?i).*finalizando juego.*\" [24h]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "title": "Tasa de Retención Semanal",
+      "description": "NOTA ARQUITECTÓNICA: Este KPI necesita una query contra profile_db (usuarios con last_login < 7d / total). Debe exponerse vía Actuator Metrics y recolectarse con Prometheus en un release futuro. Se muestra dummy (0) por ahora.",
+      "type": "stat",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "0",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 }
+    },
+    {
+      "title": "Estado de Circuit Breakers (Gateway)",
+      "description": "NOTA: Requiere exponer métricas /health en formato Prometheus. Implementación programada fuera del alcance actual de 6 semanas.",
+      "type": "stat",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "0",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Hungry Shark Royale KPIs",
+  "uid": "kpis-dash",
+  "version": 1
+}
