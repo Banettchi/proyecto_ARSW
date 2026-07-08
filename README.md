@@ -47,25 +47,32 @@ graph TD
 Para llevar este proyecto a producción en Amazon Web Services (AWS) asegurando alta disponibilidad (HA) y tolerancia a fallos, se sugiere la siguiente topología de despliegue:
 
 ```mermaid
-architecture-beta
-    group vpc(cloud)[Amazon VPC - Region]
+graph TB
+    Client([Cliente]) --> ALB
 
-    group pub(vpc)[Public Subnets]
-    service alb(server)[Application Load Balancer] in pub
-    service nat(server)[NAT Gateway] in pub
+    subgraph VPC[Amazon VPC - Región AWS]
+        
+        subgraph Public[Subredes Públicas]
+            ALB[Application Load Balancer]
+            NAT[NAT Gateway]
+        end
 
-    group priv(vpc)[Private Subnets - EKS/ECS]
-    service gateway(server)[API Gateway Pods] in priv
-    service micro(server)[Spring Boot Pods] in priv
-    
-    group data(vpc)[Data Subnets]
-    service rds(database)[Amazon RDS Aurora PostgreSQL] in data
-    service mq(server)[Amazon MQ para RabbitMQ] in data
+        subgraph Private[Subredes Privadas]
+            Gateway[API Gateway Pods - FastAPI]
+            Microservices[Spring Boot Pods - EKS/ECS]
+        end
+        
+        subgraph Data[Subredes de Datos Privadas]
+            RDS[(Amazon RDS - PostgreSQL)]
+            RabbitMQ{Amazon MQ - RabbitMQ}
+        end
 
-    alb --> gateway
-    gateway --> micro
-    micro --> rds
-    micro --> mq
+        ALB --> Gateway
+        Gateway --> Microservices
+        Microservices --> RDS
+        Microservices --> RabbitMQ
+        Microservices -.->|Egress| NAT
+    end
 ```
 
 ### Componentes AWS Sugeridos:
