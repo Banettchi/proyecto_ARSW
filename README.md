@@ -172,3 +172,88 @@ El proyecto adopta **Semantic Versioning (SemVer 2.0.0)** con el formato `MAJOR.
 
 ---
 *Desarrollado con arquitectura resiliente para soportar el apetito insaciable de miles de tiburones simultáneos.* 🦈🌊
+
+---
+
+## 🧪 Suite de Pruebas Completa
+
+El proyecto cuenta con una suite integral que cubre todos los niveles de la pirámide de pruebas.
+
+### Mapa de Cobertura
+
+| Tipo de Prueba | Caja | Archivo | Microservicio | Herramienta |
+|---|---|---|---|---|
+| Unitaria + Caja Blanca | ⬜ Blanca | `AuthServiceTest.java` | `auth-service` | JUnit 5 + Mockito |
+| Unitaria + Caja Blanca | ⬜ Blanca | `GameEngineWhiteBoxTest.java` | `game-engine-service` | JUnit 5 |
+| Integración + Caja Gris | 🔲 Gris | `LobbyManagerIntegrationTest.java` | `lobby-service` | JUnit 5 |
+| Integración + Caja Gris | 🔲 Gris | `ProfileServiceGrayBoxTest.java` | `profile-service` | JUnit 5 + Mockito |
+| Funcional + Caja Negra | ⬛ Negra | `ProfileControllerBlackBoxTest.java` | `profile-service` | MockMvc |
+| Extremo a Extremo (E2E) | ⬛ Negra | `test_auth_flow.py` | Toda la infra | pytest + httpx |
+| No Funcional (Carga) | ⬛ Negra | `locustfile.py` | API Gateway | Locust |
+
+---
+
+### ▶️ Cómo Ejecutar las Pruebas
+
+#### 1. Pruebas Unitarias y de Integración (Spring Boot — sin dependencias externas)
+
+```bash
+# Auth Service
+cd auth-service && mvn test
+
+# Profile Service
+cd profile-service && mvn test
+
+# Lobby Service
+cd lobby-service && mvn test
+
+# Game Engine Service
+cd game-engine-service && mvn test
+```
+
+#### 2. Pruebas Funcionales (Caja Negra con MockMvc — sin levantar Docker)
+
+```bash
+# Estas corren como parte del 'mvn test' de cada microservicio
+cd profile-service && mvn test -Dtest=ProfileControllerBlackBoxTest
+```
+
+#### 3. Pruebas E2E (Requiere toda la infraestructura levantada)
+
+```bash
+# 1. Primero levanta la infraestructura completa
+docker-compose up --build -d
+
+# 2. Instala dependencias Python
+cd e2e-tests && pip install -r requirements.txt
+
+# 3. Ejecuta los tests E2E
+pytest test_auth_flow.py -v
+```
+
+**Flujo E2E validado:**
+```
+Cliente (pytest) → API Gateway :8080 → Auth Service → PostgreSQL → RabbitMQ → Profile Service → PostgreSQL
+```
+
+#### 4. Pruebas No Funcionales (Carga — Requiere infraestructura levantada)
+
+```bash
+# Instala Locust
+cd performance-tests && pip install -r requirements.txt
+
+# Modo interactivo (UI en http://localhost:8089)
+locust -f locustfile.py --host=http://localhost:8080
+
+# Modo headless (100 usuarios, spawn 10/s, 60 segundos)
+locust -f locustfile.py --host=http://localhost:8080 \
+       --users 100 --spawn-rate 10 --run-time 60s --headless
+```
+
+**Métricas NFR esperadas bajo 100 usuarios concurrentes:**
+- Latencia P95 de login: `< 500ms`
+- Latencia P99 de health: `< 100ms`
+- Tasa de error: `< 1%`
+- Throughput mínimo: `> 50 RPS`
+
+
