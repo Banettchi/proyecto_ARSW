@@ -188,8 +188,9 @@ El proyecto cuenta con una suite integral que cubre todos los niveles de la pir�
 | Integración + Caja Gris | 🔲 Gris | `LobbyManagerIntegrationTest.java` | `lobby-service` | JUnit 5 |
 | Integración + Caja Gris | 🔲 Gris | `ProfileServiceGrayBoxTest.java` | `profile-service` | JUnit 5 + Mockito |
 | Funcional + Caja Negra | ⬛ Negra | `ProfileControllerBlackBoxTest.java` | `profile-service` | MockMvc |
-| Extremo a Extremo (E2E) | ⬛ Negra | `test_auth_flow.py` | Toda la infra | pytest + httpx |
-| No Funcional (Carga) | ⬛ Negra | `locustfile.py` | API Gateway | Locust |
+| Extremo a Extremo (E2E) | ⬛ Negra | `AuthFlowE2ETest.java` | Toda la infra | REST Assured |
+
+> **Nota:** En la última iteración, el **API Gateway** (originalmente en Python FastAPI) fue migrado a **Spring Cloud Gateway** (Java), unificando el stack completo del backend al ecosistema Spring Boot. Los tests E2E y de rendimiento en Python también fueron migrados a Java (REST Assured).
 
 ---
 
@@ -224,30 +225,13 @@ cd profile-service && mvn test -Dtest=ProfileControllerBlackBoxTest
 # 1. Primero levanta la infraestructura completa
 docker-compose up --build -d
 
-# 2. Instala dependencias Python
-cd e2e-tests && pip install -r requirements.txt
-
-# 3. Ejecuta los tests E2E
-pytest test_auth_flow.py -v
+# 2. Ejecuta los tests E2E
+cd e2e-tests && mvn test
 ```
 
 **Flujo E2E validado:**
 ```
-Cliente (pytest) → API Gateway :8080 → Auth Service → PostgreSQL → RabbitMQ → Profile Service → PostgreSQL
-```
-
-#### 4. Pruebas No Funcionales (Carga — Requiere infraestructura levantada)
-
-```bash
-# Instala Locust
-cd performance-tests && pip install -r requirements.txt
-
-# Modo interactivo (UI en http://localhost:8089)
-locust -f locustfile.py --host=http://localhost:8080
-
-# Modo headless (100 usuarios, spawn 10/s, 60 segundos)
-locust -f locustfile.py --host=http://localhost:8080 \
-       --users 100 --spawn-rate 10 --run-time 60s --headless
+Cliente (REST Assured) → API Gateway (Spring Cloud) :8080 → Auth Service → PostgreSQL → RabbitMQ → Profile Service → PostgreSQL
 ```
 
 **Métricas NFR esperadas bajo 100 usuarios concurrentes:**

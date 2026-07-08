@@ -1,0 +1,85 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      default-filters:
+        - JwtAuthenticationFilter
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "${FRONTEND_URL:http://localhost:3000}"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+      routes:
+        # Auth Service (REST)
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL:http://auth-service:8081}
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/fallback/auth
+
+        # Profile Service (REST)
+        - id: profile-service
+          uri: ${PROFILE_SERVICE_URL:http://profile-service:8082}
+          predicates:
+            - Path=/api/profiles/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: profileCircuitBreaker
+                fallbackUri: forward:/fallback/profile
+
+        # Profile Service (Rankings)
+        - id: ranking-service
+          uri: ${PROFILE_SERVICE_URL:http://profile-service:8082}
+          predicates:
+            - Path=/api/rankings/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: profileCircuitBreaker
+                fallbackUri: forward:/fallback/profile
+
+        # Lobby Service (WebSocket)
+        - id: lobby-service-ws
+          uri: ${LOBBY_SERVICE_URL:ws://lobby-service:8083}
+          predicates:
+            - Path=/ws-lobby/**
+
+        # Game Engine Service (WebSocket)
+        - id: game-service-ws
+          uri: ${GAME_SERVICE_URL:ws://game-engine-service:8084}
+          predicates:
+            - Path=/ws-game/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+  endpoint:
+    health:
+      show-details: always
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      authCircuitBreaker:
+        baseConfig: default
+      profileCircuitBreaker:
+        baseConfig: default
