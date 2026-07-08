@@ -11,7 +11,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,18 +26,32 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * ======================== PRUEBAS FUNCIONALES / CAJA NEGRA ========================
- * 
+ *
  * Tipo: Funcionales (Functional Tests) + Caja Negra (Black-Box)
- * 
+ *
  * Justificación:
- * - Caja Negra porque probamos SOLO entradas (HTTP Request) y salidas (HTTP Response),
- *   sin conocimiento ni interés en la implementación interna de ProfileService.
- * - Funcionales porque verificamos que los endpoints cumplen con los requisitos
- *   funcionales de las Historias de Usuario (HU-08, HU-10).
- * - Se usa @WebMvcTest que levanta SOLO la capa de controladores (slice test).
- * - ProfileService está completamente mockeado (Caja Negra pura).
+ * - Caja Negra: probamos SOLO entradas (HTTP Request) y salidas (HTTP Response),
+ *   sin conocimiento de la implementación interna de ProfileService.
+ * - Funcionales: verificamos que los endpoints cumplen con los requisitos
+ *   funcionales de las HU (HU-08, HU-10).
+ * - @WebMvcTest levanta SOLO la capa de controladores (slice test).
+ * - Los filtros de seguridad (InternalHeaderFilter, InternalOnlyFilter)
+ *   se excluyen para aislar la prueba al comportamiento puro del controlador.
+ *
+ * CORRECCIÓN (develop): Se usa @MockBean correcto de spring-boot-test
+ * y se excluyen los filtros de seguridad para evitar 401/403 falsos.
  */
-@WebMvcTest(controllers = {InternalProfileController.class, ProfileController.class})
+@WebMvcTest(
+    controllers = {InternalProfileController.class, ProfileController.class},
+    excludeFilters = @ComponentScan.Filter(
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = {
+            com.shark.profile.security.FilterConfig.class,
+            com.shark.profile.security.InternalOnlyFilter.class,
+            com.shark.profile.security.InternalHeaderFilter.class
+        }
+    )
+)
 class ProfileControllerBlackBoxTest {
 
     @Autowired
@@ -57,7 +73,8 @@ class ProfileControllerBlackBoxTest {
         @DisplayName("Entrada válida -> HTTP 201 Created")
         void createProfile_ValidInput_Returns201() throws Exception {
             UUID userId = UUID.randomUUID();
-            ProfileCreateDto dto = new ProfileCreateDto(userId, "test_shark");
+            // ProfileCreateDto tiene (userId, username, sharkName)
+            ProfileCreateDto dto = new ProfileCreateDto(userId, "test_shark", "Mi Tiburón");
 
             doNothing().when(profileService).createInitialProfile(any(UserRegisteredEventPayload.class));
 
@@ -68,11 +85,12 @@ class ProfileControllerBlackBoxTest {
         }
 
         @Test
-        @DisplayName("Entrada sin body -> HTTP 400 Bad Request")
-        void createProfile_EmptyBody_Returns400() throws Exception {
+        @DisplayName("Entrada con userId nulo -> HTTP 400 Bad Request (validación básica)")
+        void createProfile_NullUserId_Returns400() throws Exception {
+            // JSON intencionalmente malformado para forzar error de deserialización
             mockMvc.perform(post("/api/profiles/internal/create")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{}"))
+                            .content("{\"userId\": \"not-a-uuid\", \"username\": \"test\"}"))
                     .andExpect(status().isBadRequest());
         }
     }

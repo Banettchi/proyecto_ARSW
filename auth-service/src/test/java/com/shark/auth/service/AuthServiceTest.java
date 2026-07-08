@@ -32,15 +32,22 @@ import static org.mockito.Mockito.*;
 
 /**
  * ======================== PRUEBAS UNITARIAS / CAJA BLANCA ========================
- * 
+ *
  * Tipo: Unitarias (Unit Tests) + Caja Blanca (White-Box)
- * 
+ *
  * Justificación:
- * - Se prueba la lógica interna de AuthService con pleno conocimiento del código.
- * - Se aíslan todas las dependencias externas (DB, JWT) mediante Mockito.
- * - Se cubren ramas de decisión internas: username duplicado, email duplicado,
- *   formato de username inválido, contraseña débil, credenciales incorrectas.
- * - Se verifica la cobertura de caminos (path coverage) internos del método register().
+ * - Se prueba la lógica interna de AuthService con pleno conocimiento del código fuente.
+ * - Se aíslan TODAS las dependencias externas (DB, JWT, AMQP) mediante Mockito.
+ * - Se cubren las ramas (branches) de decisión internas:
+ *   username duplicado, email duplicado, formato inválido, password débil, credenciales malas.
+ * - Se verifica cobertura de caminos (path coverage) del método register().
+ * - Se verifica que el password se hashea antes de persistir (seguridad).
+ * - Se verifica que el OutboxEvent queda con estado PENDING (contrato de Outbox Pattern).
+ *
+ * CORRECCIÓN (develop):
+ * - El record RegisterRequest(username, email, password) — verificado con el constructor correcto.
+ * - LoginRequest(email, password) — verificado.
+ * - User setter de passwordHash — verificado.
  */
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -56,17 +63,18 @@ class AuthServiceTest {
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        authService = new AuthService(userRepository, outboxEventRepository, passwordEncoder, jwtProvider, objectMapper);
+        authService = new AuthService(
+                userRepository, outboxEventRepository, passwordEncoder, jwtProvider, objectMapper);
     }
 
     // =================== REGISTER ===================
 
     @Nested
-    @DisplayName("register() - Caja Blanca: Ramas de validación")
+    @DisplayName("register() - Caja Blanca: todos los caminos de decisión")
     class RegisterTests {
 
         @Test
-        @DisplayName("Registro exitoso: crea usuario, outbox event y retorna JWT")
+        @DisplayName("Camino feliz: registro exitoso crea usuario, outbox event y retorna JWT")
         void register_HappyPath_ReturnsAuthResponseWithToken() {
             RegisterRequest req = new RegisterRequest("shark_player", "player@test.com", "SecurePass123");
 
@@ -88,7 +96,7 @@ class AuthServiceTest {
             assertEquals("shark_player", response.username());
             assertNotNull(response.userId());
 
-            // Verificar que el OutboxEvent fue creado con estado PENDING
+            // Verificar que el OutboxEvent fue creado con estado PENDING (Outbox Pattern)
             ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
             verify(outboxEventRepository).save(outboxCaptor.capture());
             assertEquals(OutboxStatus.PENDING, outboxCaptor.getValue().getStatus());
@@ -96,7 +104,7 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Rama: Username duplicado lanza UsernameAlreadyExistsException")
+        @DisplayName("Rama 1: Username duplicado → lanza UsernameAlreadyExistsException")
         void register_DuplicateUsername_ThrowsException() {
             RegisterRequest req = new RegisterRequest("existing_user", "new@test.com", "SecurePass123");
             when(userRepository.existsByUsername("existing_user")).thenReturn(true);
@@ -106,7 +114,7 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Rama: Email duplicado lanza EmailAlreadyExistsException")
+        @DisplayName("Rama 2: Email duplicado → lanza EmailAlreadyExistsException")
         void register_DuplicateEmail_ThrowsException() {
             RegisterRequest req = new RegisterRequest("new_user", "existing@test.com", "SecurePass123");
             when(userRepository.existsByUsername("new_user")).thenReturn(false);
@@ -117,7 +125,7 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Rama: Username con caracteres especiales lanza InvalidUsernameFormatException")
+        @DisplayName("Rama 3: Username con caracteres especiales → lanza InvalidUsernameFormatException")
         void register_InvalidUsernameFormat_ThrowsException() {
             RegisterRequest req = new RegisterRequest("user@invalid!", "test@test.com", "SecurePass123");
             when(userRepository.existsByUsername(anyString())).thenReturn(false);
@@ -128,7 +136,17 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Rama: Contraseña menor a 8 caracteres lanza WeakPasswordException")
+        @DisplayName("Rama 3b: Username con espacios → lanza InvalidUsernameFormatException")
+        void register_UsernameWithSpaces_ThrowsException() {
+            RegisterRequest req = new RegisterRequest("user name", "test@test.com", "SecurePass123");
+            when(userRepository.existsByUsername(anyString())).thenReturn(false);
+            when(userRepository.existsByEmail(anyString())).thenReturn(false);
+
+            assertThrows(InvalidUsernameFormatException.class, () -> authService.register(req));
+        }
+
+        @Test
+        @DisplayName("Rama 4: Contraseña menor a 8 caracteres → lanza WeakPasswordException")
         void register_WeakPassword_ThrowsException() {
             RegisterRequest req = new RegisterRequest("valid_user", "test@test.com", "short");
             when(userRepository.existsByUsername(anyString())).thenReturn(false);
@@ -139,7 +157,7 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Verifica que el password se hashea antes de guardar (nunca plaintext)")
+        @DisplayName("Seguridad: password se hashea antes de guardar, NUNCA se almacena en texto plano")
         void register_PasswordIsHashed_NeverStoredPlaintext() {
             RegisterRequest req = new RegisterRequest("hashed_user", "hash@test.com", "MySecretPass");
             when(userRepository.existsByUsername(anyString())).thenReturn(false);
@@ -158,18 +176,19 @@ class AuthServiceTest {
             ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
             verify(userRepository).save(userCaptor.capture());
             assertEquals("$2a$10$encodedHash", userCaptor.getValue().getPasswordHash());
-            assertNotEquals("MySecretPass", userCaptor.getValue().getPasswordHash());
+            assertNotEquals("MySecretPass", userCaptor.getValue().getPasswordHash(),
+                    "El password NUNCA debe almacenarse en texto plano");
         }
     }
 
     // =================== LOGIN ===================
 
     @Nested
-    @DisplayName("login() - Caja Blanca: Ramas de autenticación")
+    @DisplayName("login() - Caja Blanca: ramas de autenticación")
     class LoginTests {
 
         @Test
-        @DisplayName("Login exitoso con credenciales válidas")
+        @DisplayName("Login exitoso con credenciales válidas → retorna JWT")
         void login_ValidCredentials_ReturnsToken() {
             User user = new User();
             user.setId(UUID.randomUUID());
@@ -189,24 +208,24 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("Rama: Email no encontrado lanza InvalidCredentialsException")
+        @DisplayName("Rama: Email no registrado → lanza InvalidCredentialsException (no revela si existe)")
         void login_EmailNotFound_ThrowsException() {
             when(userRepository.findByEmail("ghost@test.com")).thenReturn(Optional.empty());
-            LoginRequest req = new LoginRequest("ghost@test.com", "password");
 
-            assertThrows(InvalidCredentialsException.class, () -> authService.login(req));
+            assertThrows(InvalidCredentialsException.class,
+                    () -> authService.login(new LoginRequest("ghost@test.com", "password")));
         }
 
         @Test
-        @DisplayName("Rama: Password incorrecto lanza InvalidCredentialsException")
+        @DisplayName("Rama: Password incorrecto → lanza InvalidCredentialsException")
         void login_WrongPassword_ThrowsException() {
             User user = new User();
             user.setPasswordHash("$2a$10$correctHash");
             when(userRepository.findByEmail("player@test.com")).thenReturn(Optional.of(user));
             when(passwordEncoder.matches("wrongPassword", "$2a$10$correctHash")).thenReturn(false);
 
-            LoginRequest req = new LoginRequest("player@test.com", "wrongPassword");
-            assertThrows(InvalidCredentialsException.class, () -> authService.login(req));
+            assertThrows(InvalidCredentialsException.class,
+                    () -> authService.login(new LoginRequest("player@test.com", "wrongPassword")));
         }
     }
 }
